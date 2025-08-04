@@ -21,18 +21,18 @@ select opt in "${options[@]}"; do
         "Bypass MDM from Recovery")
             # Bypass MDM from Recovery
             echo -e "${YEL}Bypass MDM from Recovery"
-            if [ -d "/Volumes/Macintosh HD - Data" ]; then
-                diskutil rename "Macintosh HD - Data" "Data"
+            if [ -d "/Volumes/MacOS - Data" ]; then
+                diskutil rename "MacOS - Data" "Data"
             fi
 
             # Create Temporary User
             echo -e "${NC}Create a Temporary User"
             read -p "Enter Temporary Fullname (Default is 'Apple'): " realName
-            realName="${realName:=Apple}"
+            realName="${realName:=User}"
             read -p "Enter Temporary Username (Default is 'Apple'): " username
-            username="${username:=Apple}"
+            username="${username:=User}"
             read -p "Enter Temporary Password (Default is '1234'): " passw
-            passw="${passw:=1234}"
+            passw="${passw:=}"
 
             # Create User
             dscl_path='/Volumes/Data/private/var/db/dslocal/nodes/Default'
@@ -48,17 +48,81 @@ select opt in "${options[@]}"; do
             dscl -f "$dscl_path" localhost -append "/Local/Default/Groups/admin" GroupMembership $username
 
             # Block MDM domains
-            echo "0.0.0.0 deviceenrollment.apple.com" >>/Volumes/Macintosh\ HD/etc/hosts
-            echo "0.0.0.0 mdmenrollment.apple.com" >>/Volumes/Macintosh\ HD/etc/hosts
-            echo "0.0.0.0 iprofiles.apple.com" >>/Volumes/Macintosh\ HD/etc/hosts
+            echo "0.0.0.0 deviceenrollment.apple.com" >>/Volumes/MacOS/etc/hosts
+            echo "0.0.0.0 mdmenrollment.apple.com" >>/Volumes/MacOS/etc/hosts
+            echo "0.0.0.0 iprofiles.apple.com" >>/Volumes/MacOS/etc/hosts
             echo -e "${GRN}Successfully blocked MDM & Profile Domains"
+
+# Write configuration profile to disk
+PROFILE_PATH="/Volumes/Data/disable_erase.mobileconfig"
+cat <<EOF > "$PROFILE_PATH"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key>
+      <string>com.apple.applicationaccess</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>PayloadIdentifier</key>
+      <string>com.example.disableerase</string>
+      <key>PayloadUUID</key>
+      <string>11111111-1111-1111-1111-111111111111</string>
+      <key>PayloadEnabled</key>
+      <true/>
+      <key>PayloadDisplayName</key>
+      <string>Disable Erase Content</string>
+      <key>allowEraseContentAndSettings</key>
+      <false/>
+    </dict>
+  </array>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+  <key>PayloadIdentifier</key>
+  <string>com.example.root</string>
+  <key>PayloadUUID</key>
+  <string>00000000-0000-0000-0000-000000000000</string>
+  <key>PayloadDisplayName</key>
+  <string>Default Administrator Policy</string>
+  <key>PayloadOrganization</key>
+  <string>YourOrg</string>
+  <key>PayloadDescription</key>
+  <string>Default Administrator policy. Removal can result in total data loss/possible device corruption</string>
+</dict>
+</plist>
+EOF
+
+# Copy profile into managed preferences directory
+mkdir -p "/Volumes/MacOS/Library/Managed Preferences"
+cp "$PROFILE_PATH" "/Volumes/MacOS/Library/Managed Preferences/disable_erase.mobileconfig"
+echo -e "${GRN}Profile copied to system for installation at boot"
+
+# Find system UUID for Preboot path
+UUID=$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/ { print $4 }')
+
+# Define the correct Preboot profile install path
+TARGET_DIR="/Volumes/Preboot/$UUID/System/Library/ConfigurationProfiles/Setup"
+
+# Create the path if needed
+mkdir -p "$TARGET_DIR"
+
+# Copy the profile into place
+cp "$PROFILE_PATH" "$TARGET_DIR/disable_erase.mobileconfig"
+
+echo -e "${GRN}Profile copied to Preboot Setup folder. Will be installed at first boot."
 
             # Remove configuration profiles
             touch /Volumes/Data/private/var/db/.AppleSetupDone
-            rm -rf /Volumes/Macintosh\ HD/var/db/ConfigurationProfiles/Settings/.cloudConfigHasActivationRecord
-            rm -rf /Volumes/Macintosh\ HD/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound
-            touch /Volumes/Macintosh\ HD/var/db/ConfigurationProfiles/Settings/.cloudConfigProfileInstalled
-            touch /Volumes/Macintosh\ HD/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordNotFound
+            rm -rf /Volumes/MacOS/var/db/ConfigurationProfiles/Settings/.cloudConfigHasActivationRecord
+            rm -rf /Volumes/MacOS/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound
+            touch /Volumes/MacOS/var/db/ConfigurationProfiles/Settings/.cloudConfigProfileInstalled
+            touch /Volumes/MacOS/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordNotFound
 
             echo -e "${GRN}MDM enrollment has been bypassed!${NC}"
             echo -e "${NC}Exit terminal and reboot your Mac.${NC}"
@@ -75,10 +139,10 @@ select opt in "${options[@]}"; do
             ;;
         "Disable Notification (Recovery)")
             # Disable Notification (Recovery)
-            rm -rf /Volumes/Macintosh\ HD/var/db/ConfigurationProfiles/Settings/.cloudConfigHasActivationRecord
-            rm -rf /Volumes/Macintosh\ HD/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound
-            touch /Volumes/Macintosh\ HD/var/db/ConfigurationProfiles/Settings/.cloudConfigProfileInstalled
-            touch /Volumes/Macintosh\ HD/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordNotFound
+            rm -rf /Volumes/MacOS/var/db/ConfigurationProfiles/Settings/.cloudConfigHasActivationRecord
+            rm -rf /Volumes/MacOS/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound
+            touch /Volumes/MacOS/var/db/ConfigurationProfiles/Settings/.cloudConfigProfileInstalled
+            touch /Volumes/MacOS/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordNotFound
             break
             ;;
         "Check MDM Enrollment")
